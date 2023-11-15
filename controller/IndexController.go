@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/julienschmidt/httprouter"
 	"go_movies/services"
 	"go_movies/utils"
 	"go_movies/utils/spider/tian_kong"
@@ -9,6 +8,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 func Index(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
@@ -104,15 +105,15 @@ func Display(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	show["allCategories"] = getAllCategory(Categories)
 
 	// 根据不同类别显示不同 筛选类别项
-	if utils.InArray(cateIntId, tian_kong.GetAssignCategoryIds("film")) || cateIntId == 1 {
+	if utils.InArray(cateStrId, tian_kong.GetAssignCategoryIds("film")) || cateIntId == 1 {
 		show["currentSubCate"] = getAssignTypeSubCategories(Categories, "film")
 	}
 
-	if utils.InArray(cateIntId, tian_kong.GetAssignCategoryIds("tv")) || cateIntId == 2 {
+	if utils.InArray(cateStrId, tian_kong.GetAssignCategoryIds("tv")) || cateIntId == 2 {
 		show["currentSubCate"] = getAssignTypeSubCategories(Categories, "tv")
 	}
 
-	if utils.InArray(cateIntId, tian_kong.GetAssignCategoryIds("cartoon")) || cateIntId == 4 {
+	if utils.InArray(cateStrId, tian_kong.GetAssignCategoryIds("cartoon")) || cateIntId == 4 {
 		show["currentSubCate"] = getAssignTypeSubCategories(Categories, "cartoon")
 	}
 

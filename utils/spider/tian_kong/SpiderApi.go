@@ -1,10 +1,6 @@
 package tian_kong
 
 import (
-	"github.com/go-redis/redis/v7"
-	"github.com/panjf2000/ants/v2"
-	"github.com/spf13/viper"
-	"github.com/valyala/fasthttp"
 	"go_movies/utils"
 	"log"
 	"regexp"
@@ -13,9 +9,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-redis/redis/v7"
+	"github.com/panjf2000/ants/v2"
+	"github.com/spf13/viper"
+	"github.com/valyala/fasthttp"
 )
 
-const ApiHost = "https://api.tiankongapi.com/api.php/provide/vod"
+// 优质资源站 "https://api.1080zyku.com/inc/api_mac10.php"
+
+const ApiHost = "https://api.1080zyku.com/inc/api_mac10.php" //"http://api.tiankongapi.com/api.php/provide/vod"
 const AcList = "list"
 const AcDetail = "detail"
 
@@ -24,12 +27,12 @@ type SpiderApi struct {
 }
 
 type Lists struct {
-	VodId         int    `json:"vod_id"` // 如果json中vod_id不是“1”，而是 1 ，这里一定要声明为 int ！！！fuck 不愧是静态强类型
-	VodName       string `json:"vod_name"`
-	TypeId        int    `json:"type_id"`
-	TypeId1       int    `json:"type_id_1"`
+	VodId   string `json:"vod_id"` // 如果json中vod_id不是“1”，而是 1 ，这里一定要声明为 int ！！！fuck 不愧是静态强类型
+	VodName string `json:"vod_name"`
+	TypeId  string `json:"type_id"`
+	// TypeId1       int    `json:"type_id_1"`
 	TypeName      string `json:"type_name"`
-	VodEn         string `json:"vod_en"`
+	VodEn         string `json:"vod_enname"`
 	VodTime       string `json:"vod_time"`
 	VodRemarks    string `json:"vod_remarks"`
 	VodPlayFrom   string `json:"vod_play_from"`
@@ -44,18 +47,23 @@ type Lists struct {
 	VodDuration   string `json:"vod_duration"`
 	VodActor      string `json:"vod_actor"`
 	VodContent    string `json:"vod_content"`
-	VodPointsPlay int    `json:"vod_points_play"`
+	VodPointsPlay string `json:"vod_points_play"`
 	VodScore      string `json:"vod_score"`
 }
 
+type typeList struct {
+	TypeId   string `json:"type_id"`
+	TypeName string `json:"type_name"`
+}
 type ResData struct {
-	Msg       string  `json:"msg"`
-	Code      int     `json:"code"`
-	Page      string  `json:"page"`
-	PageCount int     `json:"pagecount"`
-	Limit     string  `json:"limit"`
-	Total     int     `json:"total"`
-	List      []Lists `json:"list"`
+	Msg       string     `json:"msg"`
+	Code      int        `json:"code"`
+	Page      int        `json:"page"`
+	PageCount int        `json:"pagecount"`
+	Limit     int        `json:"limit"`
+	Total     int        `json:"total"`
+	List      []Lists    `json:"list"`
+	Class     []typeList `json:"class"`
 }
 
 type Categories struct {
@@ -192,7 +200,7 @@ func actionRecentUpdateList() {
 			//time.Sleep(time.Second * 2)
 			//return
 			url := ApiHost + "?h=6" + "&pg=" + strconv.Itoa(j)
-			_, resp, gErr := fasthttp.Get(nil, url)
+			_, resp, gErr := fasthttp.Post(nil, url, nil)
 			if gErr != nil {
 				log.Println("actionRecentUpdateList 请求失败:", gErr.Error())
 				return
@@ -213,36 +221,36 @@ func actionRecentUpdateList() {
 					timeTemplate := "2006-01-02 15:04:05"
 					stamp1, _ := time.ParseInLocation(timeTemplate, value.VodTime, time.Local)
 
-					utils.RedisDB.ZAdd("detail_links:id:"+strconv.Itoa(value.TypeId), &redis.Z{
+					utils.RedisDB.ZAdd("detail_links:id:"+value.TypeId, &redis.Z{
 						Score:  float64(stamp1.Unix()),
-						Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+						Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 					})
 
 					if inType(value.TypeId, film) {
 						utils.RedisDB.ZAdd("detail_links:id:1", &redis.Z{
 							Score:  float64(stamp1.Unix()),
-							Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+							Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 						})
 						// 获取详情
-						Detail(strconv.Itoa(value.VodId), 0)
+						Detail(value.VodId, 0)
 					}
 
 					if inType(value.TypeId, tv) {
 						utils.RedisDB.ZAdd("detail_links:id:3", &redis.Z{
 							Score:  float64(stamp1.Unix()),
-							Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+							Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 						})
 						// 获取详情
-						Detail(strconv.Itoa(value.VodId), 0)
+						Detail(value.VodId, 0)
 					}
 
 					if inType(value.TypeId, cartoon) {
 						utils.RedisDB.ZAdd("detail_links:id:24", &redis.Z{
 							Score:  float64(stamp1.Unix()),
-							Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+							Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 						})
 						// 获取详情
-						Detail(strconv.Itoa(value.VodId), 0)
+						Detail(value.VodId, 0)
 					}
 				}
 			}
@@ -273,7 +281,7 @@ func RecentUpdatePageCount(retry int) int {
 	}
 	url := ApiHost + "?h=6&pg=1"
 
-	_, resp, gErr := fasthttp.Get(nil, url)
+	_, resp, gErr := fasthttp.Post(nil, url, nil)
 	if gErr != nil {
 		retry++
 		log.Println("RecentUpdatePageCount 请求失败:", retry, url, gErr.Error())
@@ -304,7 +312,7 @@ func actionList(subCategoryId string, pg int, pageCount int) {
 		url := ApiHost + "?ac=" + AcList + "&t=" + subCategoryId + "&pg=" + strconv.Itoa(j)
 		log.Println("当前page"+strconv.Itoa(j), url, pageCount)
 
-		_, resp, gErr := fasthttp.Get(nil, url)
+		_, resp, gErr := fasthttp.Post(nil, url, nil)
 		if gErr != nil {
 			log.Println("actionList 请求失败:", url, gErr.Error())
 			return
@@ -323,36 +331,36 @@ func actionList(subCategoryId string, pg int, pageCount int) {
 			stamp1, _ := time.ParseInLocation(timeTemplate, value.VodTime, time.Local)
 
 			if inType(value.TypeId, saveTypes) {
-				utils.RedisDB.ZAdd("detail_links:id:"+strconv.Itoa(value.TypeId), &redis.Z{
+				utils.RedisDB.ZAdd("detail_links:id:"+value.TypeId, &redis.Z{
 					Score:  float64(stamp1.Unix()),
-					Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+					Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 				})
 
 				if inType(value.TypeId, film) {
 					utils.RedisDB.ZAdd("detail_links:id:1", &redis.Z{
 						Score:  float64(stamp1.Unix()),
-						Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+						Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 					})
 					// 获取详情
-					Detail(strconv.Itoa(value.VodId), 0)
+					Detail(value.VodId, 0)
 				}
 
 				if inType(value.TypeId, tv) {
 					utils.RedisDB.ZAdd("detail_links:id:3", &redis.Z{
 						Score:  float64(stamp1.Unix()),
-						Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+						Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 					})
 					// 获取详情
-					Detail(strconv.Itoa(value.VodId), 0)
+					Detail(value.VodId, 0)
 				}
 
 				if inType(value.TypeId, cartoon) {
 					utils.RedisDB.ZAdd("detail_links:id:24", &redis.Z{
 						Score:  float64(stamp1.Unix()),
-						Member: `/?m=vod-detail-id-` + strconv.Itoa(value.VodId) + `.html`,
+						Member: `/?m=vod-detail-id-` + value.VodId + `.html`,
 					})
 					// 获取详情
-					Detail(strconv.Itoa(value.VodId), 0)
+					Detail(value.VodId, 0)
 				}
 			}
 		}
@@ -364,9 +372,9 @@ func pageCount(subCategoryId string, retry int) (int, string) {
 	if retry >= 4 {
 		return 0, subCategoryId
 	}
-	url := ApiHost + "?ac=" + AcList + "&t=" + subCategoryId + "&pg=1"
+	url := ApiHost + "?ac=" + AcDetail + "&t=" + subCategoryId + "&pg=1"
 
-	_, resp, err := fasthttp.Get(nil, url)
+	_, resp, err := fasthttp.Post(nil, url, nil)
 	if err != nil {
 		retry++
 		log.Println("pageCount 请求失败:", retry, url, err.Error())
@@ -396,7 +404,7 @@ func Detail(id string, retry int) {
 	//	return
 	//}
 
-	_, resp, gErr := fasthttp.Get(nil, url)
+	_, resp, gErr := fasthttp.Post(nil, url, nil)
 	if gErr != nil {
 		log.Println("Detail 请求失败:", gErr.Error(), url)
 		return
@@ -441,7 +449,7 @@ func Detail(id string, retry int) {
 
 	for ik, kuyunValue := range kuyun {
 		episode := strconv.Itoa(ik + 1)
-		episode = Lang(listDetail.TypeId1, kuyunValue, listDetail.VodPlayUrl, episode)
+		episode = Lang(listDetail.TypeId, kuyunValue, listDetail.VodPlayUrl, episode)
 		k := map[string]string{
 			"episode":   episode,
 			"play_link": kuyunValue}
@@ -452,7 +460,7 @@ func Detail(id string, retry int) {
 
 	for ic, ckm3u8Value := range ckm3u8 {
 		episode := strconv.Itoa(ic + 1)
-		episode = Lang(listDetail.TypeId1, ckm3u8Value, listDetail.VodPlayUrl, episode)
+		episode = Lang(listDetail.TypeId, ckm3u8Value, listDetail.VodPlayUrl, episode)
 		c := map[string]string{
 			"episode":   episode,
 			"play_link": ckm3u8Value}
@@ -463,7 +471,7 @@ func Detail(id string, retry int) {
 
 	for im, mp4Value := range mp4 {
 		episode := strconv.Itoa(im + 1)
-		episode = Lang(listDetail.TypeId1, mp4Value, listDetail.VodPDownUrl, episode)
+		episode = Lang(listDetail.TypeId, mp4Value, listDetail.VodPDownUrl, episode)
 		m := map[string]string{
 			"episode":   episode,
 			"play_link": mp4Value}
@@ -476,7 +484,7 @@ func Detail(id string, retry int) {
 	ckm3u8AryJson, _ := utils.Json.MarshalIndent(ckm3u8Ary, "", " ")
 	downloadAryJson, _ := utils.Json.MarshalIndent(downloadAry, "", " ")
 
-	link := `/?m=vod-detail-id-` + strconv.Itoa(listDetail.VodId) + `.html`
+	link := `/?m=vod-detail-id-` + listDetail.VodId + `.html`
 	_moviesInfo["link"] = link
 	_moviesInfo["cover"] = listDetail.VodPic
 	_moviesInfo["name"] = listDetail.VodName
@@ -559,9 +567,9 @@ func getCategoryPageCount() []CatePageCount {
 }
 
 // 区分电影的广东话跟国语
-func Lang(vodType int, resourcesUrl, allResource, episode string) string {
+func Lang(vodType string, resourcesUrl, allResource, episode string) string {
 
-	if vodType == 1 {
+	if vodType == "1" {
 		cantonese := "粤语$" + resourcesUrl
 		mandarin := "国语$" + resourcesUrl
 		hdCantonese := "HD粤语高清$" + resourcesUrl
@@ -624,7 +632,7 @@ func FormatVodPDownUrl(VodPDownUrl string) []string {
 	return urls
 }
 
-func inType(s int, d []int) bool {
+func inType(s string, d []string) bool {
 	for _, k := range d {
 		if s == k {
 			return true
@@ -659,9 +667,9 @@ func DelAllListCacheKey() {
 	utils.RedisDB.Del("paginate")
 }
 
-func GetAssignCategoryIds(_type string) []int {
+func GetAssignCategoryIds(_type string) []string {
 
-	ids := make([]int, 0)
+	ids := make([]string, 0)
 
 	var nav []Categories
 	categoriesStr := CategoriesStr()
@@ -679,25 +687,22 @@ func GetAssignCategoryIds(_type string) []int {
 	switch _type {
 	case "film":
 		for _, v := range film {
-			intId, _ := strconv.Atoi(v.TypeId)
-			ids = append(ids, intId)
+			ids = append(ids, v.TypeId)
 		}
 	case "tv":
 		for _, v := range tv {
-			intId, _ := strconv.Atoi(v.TypeId)
-			ids = append(ids, intId)
+			ids = append(ids, v.TypeId)
 		}
 	case "cartoon":
 		for _, v := range cartoon {
-			intId, _ := strconv.Atoi(v.TypeId)
-			ids = append(ids, intId)
+			ids = append(ids, v.TypeId)
 		}
 	}
 	return ids
 }
 
-func GetIntSubCategoryIds() []int {
-	ids := make([]int, 0)
+func GetIntSubCategoryIds() []string {
+	ids := make([]string, 0)
 
 	var nav []Categories
 	categoriesStr := CategoriesStr()
@@ -711,8 +716,7 @@ func GetIntSubCategoryIds() []int {
 	for _, value := range nav {
 		for _, subValue := range value.Sub {
 			Smutex.Lock()
-			intId, _ := strconv.Atoi(subValue.TypeId)
-			ids = append(ids, intId)
+			ids = append(ids, subValue.TypeId)
 			Smutex.Unlock()
 		}
 	}

@@ -1,7 +1,9 @@
-FROM scratch
+#FROM scratch
+FROM busybox:latest
 
-WORKDIR $GOPATH/src/github.com/hezhizheng/go-movies
-COPY . $GOPATH/src/github.com/hezhizheng/go-movies
+WORKDIR /app
+COPY . /app
 
 #EXPOSE 8000, 默认直接使用编译好的端口
-CMD ["./go_movies_linux_amd64"]
+CMD ["./go_movies"]
+#RUN echo "just a test"
